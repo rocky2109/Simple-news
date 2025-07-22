@@ -18,28 +18,27 @@ def fetch_news():
     try:
         url = (
             f"https://newsapi.org/v2/top-headlines?"
-            f"country=in&"
-            f"category=general&"
-            f"from={get_today()}&"
+            f"country=in&category=general&"
+            f"pageSize=1&"
             f"apiKey={NEWS_API_KEY}"
         )
-        response = requests.get(url)
-        data = response.json()
+        r = requests.get(url, timeout=10)
+        data = r.json()
 
         if data.get("status") != "ok" or not data.get("articles"):
+            print(f"No fresh news: {data.get('message')}")
             return None
 
-        # Return the first news article
-        article = data["articles"][0]
+        a = data["articles"][0]
         return {
-            "title": article["title"],
-            "summary": article["description"] or "",
-            "url": article["url"],
-            "image": article["urlToImage"] or None,
+            "title": a["title"],
+            "summary": a.get("description") or a.get("content", ""),
+            "url": a["url"],
+            "image": a.get("urlToImage")
         }
 
     except Exception as e:
-        print(f"[❌] Error fetching news: {e}")
+        print(f"[Error] fetch_news: {e}")
         return None
 
 # /start command
