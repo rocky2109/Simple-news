@@ -1,11 +1,12 @@
-import requests
 import os
-from telegram import Bot, Update
-from telegram.ext import Updater, CommandHandler, CallbackContext
+import requests
+from telegram import Update, Bot
+from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
-CHANNEL_ID = os.getenv("CHANNEL_ID")  # For auto news post
+CHANNEL_ID = os.getenv("CHANNEL_ID")  # e.g. "@yourchannel" or -1001234567890
 NEWS_API_KEY = os.getenv("NEWS_API_KEY")
+
 
 def fetch_news():
     url = f"https://api.worldnewsapi.com/search-news?text=India&language=en&number=1&api-key={NEWS_API_KEY}"
@@ -21,48 +22,37 @@ def fetch_news():
         "image": news.get("image", None)
     }
 
-def send_news_to_channel():
+
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("👋 I'm your Indian News Bot! I'll post the latest news to your channel automatically.")
+
+
+async def on_startup(app):
+    # Send bot started message to channel
+    bot = Bot(BOT_TOKEN)
+    await bot.send_message(
+        chat_id=CHANNEL_ID,
+        text="🚀 News Bot has started successfully!"
+    )
+
+    # Optional: send one news article on startup
     news = fetch_news()
-    if not news:
-        return
-    bot = Bot(token=BOT_TOKEN)
-    caption = f"""📰 *{news['title']}*
+    if news:
+        caption = f"📰 *{news['title']}*\n\n{news['summary']}\n\n🔗 [Read more]({news['url']})"
+        await bot.send_photo(
+            chat_id=CHANNEL_ID,
+            photo=news['image'] if news['image'] else "https://via.placeholder.com/512",
+            caption=caption,
+            parse_mode="Markdown"
+        )
 
-{news['summary']}
-
-🔗 [Read more]({news['url']})
-"""
-    bot.send_photo(
-        chat_id=CHANNEL_ID,
-        photo=news['image'] if news['image'] else "https://via.placeholder.com/512",
-        caption=caption,
-        parse_mode="Markdown"
-    )
-
-def send_startup_message():
-    bot = Bot(token=BOT_TOKEN)
-    bot.send_message(
-        chat_id=CHANNEL_ID,
-        text="🚀 *News Bot has started successfully!*",
-        parse_mode="Markdown"
-    )
-
-def start(update: Update, context: CallbackContext):
-    update.message.reply_text(
-        "👋 Hello! I'm your Indian News Bot.\n\nI'll keep your channel updated with the latest Indian news headlines hourly.\n\n✅ Deployed & ready!"
-    )
 
 def main():
-    send_startup_message()
-    send_news_to_channel()  # Optional: auto-send news on startup
+    app = ApplicationBuilder().token(BOT_TOKEN).build()
+    app.add_handler(CommandHandler("start", start))
+    app.post_init = on_startup
+    app.run_polling()
 
-    # Set up command listener
-    updater = Updater(token=BOT_TOKEN, use_context=True)
-    dispatcher = updater.dispatcher
-    dispatcher.add_handler(CommandHandler("start", start))
-
-    updater.start_polling()
-    updater.idle()
 
 if __name__ == "__main__":
     main()
