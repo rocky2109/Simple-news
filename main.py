@@ -1,5 +1,6 @@
 import os
 import requests
+from datetime import datetime
 from telegram import Update, Bot
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
 
@@ -9,9 +10,12 @@ NEWS_API_KEY = os.getenv("NEWS_API_KEY")
 
 def fetch_news():
     try:
+        # Get today's date in YYYY-MM-DD format
+        today = datetime.now().strftime("%Y-%m-%d")
+
         url = (
             f"https://newsapi.org/v2/top-headlines?"
-            f"country=in&category=general&"
+            f"country=in&category=general&from={today}&to={today}&"
             f"pageSize=1&apiKey={NEWS_API_KEY}"
         )
         r = requests.get(url, timeout=10)
@@ -35,7 +39,8 @@ def fetch_news():
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
-        "👋 Welcome! This bot posts today's freshest Indian news to the channel. 🇮🇳"
+        "👋 Welcome! This bot posts *today's Indian news headlines*. 🇮🇳\n"
+        "You'll automatically receive news daily when the bot restarts."
     )
 
 async def on_startup(app):
