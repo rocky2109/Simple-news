@@ -8,36 +8,42 @@ BOT_TOKEN = os.getenv("BOT_TOKEN")  # Set in Koyeb Secret
 CHANNEL_ID = os.getenv("CHANNEL_ID")  # Telegram Channel ID like "@yourchannel"
 NEWS_API_KEY = os.getenv("NEWS_API_KEY")  # Your NewsAPI key
 
+from datetime import datetime, timedelta
+
 def fetch_news():
     try:
-        today = datetime.now().strftime("%Y-%m-%d")
+        # Get date 7 days ago
+        today = datetime.now()
+        from_date = (today - timedelta(days=7)).strftime("%Y-%m-%d")
+        to_date = today.strftime("%Y-%m-%d")
 
         url = (
             f"https://newsapi.org/v2/top-headlines?"
-            f"country=in&category=general&pageSize=5&"
-            f"from={today}&to={today}&apiKey={NEWS_API_KEY}"
+            f"country=in&category=general&from={from_date}&to={to_date}&"
+            f"pageSize=3&apiKey={NEWS_API_KEY}"
         )
 
         r = requests.get(url, timeout=10)
         data = r.json()
 
         if data.get("status") != "ok" or not data.get("articles"):
-            print("⚠️ No fresh news:", data.get("message"))
-            return []
+            print("⚠️ No weekly news:", data.get("message"))
+            return None
 
         return [
             {
                 "title": a["title"],
-                "summary": a.get("description") or "",
+                "summary": a.get("description") or a.get("content", ""),
                 "url": a["url"],
                 "image": a.get("urlToImage")
             }
-            for a in data["articles"]
+            for a in data["articles"][:3]
         ]
 
     except Exception as e:
         print(f"[Error] fetch_news: {e}")
-        return []
+        return None
+
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
