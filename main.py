@@ -1,24 +1,30 @@
 import os
 import random
 import feedparser
-from telegram import Bot
-from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
-from telegram import Update
 import html
 import re
+from telegram import Bot, Update
+from telegram.ext import (
+    ApplicationBuilder,
+    CommandHandler,
+    ContextTypes,
+    JobQueue,
+)
 
-BOT_TOKEN = os.getenv("BOT_TOKEN")  # Add your bot token here
-CHANNEL_ID = os.getenv("CHANNEL_ID")  # Or use chat_id for testing
+BOT_TOKEN = os.getenv("BOT_TOKEN")  # Your bot token
+CHANNEL_ID = os.getenv("CHANNEL_ID")  # Your channel or user chat ID
 
-# 🎯 List of RSS feeds
+# RSS Feeds for English, Hindi, Gujarati
 RSS_FEEDS = {
     "English": "https://timesofindia.indiatimes.com/rssfeedstopstories.cms",
     "Hindi": "https://www.bhaskar.com/rss-feed/2278/",
     "Gujarati": "https://www.divyabhaskar.co.in/rss-feed/74/"
 }
 
+# Cache to avoid repeat news
+sent_links = set()
+
 def extract_image(entry):
-    # Some RSS feeds include image inside summary as <img>
     match = re.search(r'<img[^>]+src="([^"]+)"', entry.get("summary", ""))
     return match.group(1) if match else None
 
@@ -29,11 +35,20 @@ def fetch_random_news():
     if not feed.entries:
         return None, None
 
-    entry = random.choice(feed.entries)
+    # Try up to 5 times to get a new article
+    for _ in range(5):
+        entry = random.choice(feed.entries)
+        if entry.link not in sent_links:
+            break
+    else:
+        return None, None  # All are repeated
+
     title = html.unescape(entry.title)
-    summary = html.unescape(re.sub(r'<[^>]+>', '', entry.get("summary", "")))[:300]  # Clean HTML
+    summary = html.unescape(re.sub(r'<[^>]+>', '', entry.get("summary", "")))[:280].rstrip() + "..."
     link = entry.link
     image = extract_image(entry)
+
+    sent_links.add(link)  # Mark this news as sent
 
     message = f"🗞️ *{lang} News*\n\n*{title}*\n\n{summary}\n\n🔗 [Read more]({link})"
     return message, image
@@ -41,7 +56,7 @@ def fetch_random_news():
 async def send_news(update: Update, context: ContextTypes.DEFAULT_TYPE):
     msg, img = fetch_random_news()
     if not msg:
-        await update.message.reply_text("⚠️ No news found at the moment.")
+        await update.message.reply_text("⚠️ No fresh news found right now.")
         return
 
     if img:
@@ -49,8 +64,8 @@ async def send_news(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         await update.message.reply_text(msg, parse_mode="Markdown")
 
-async def on_startup(app):
-    bot = Bot(BOT_TOKEN)
+async def auto_post_news(context: ContextTypes.DEFAULT_TYPE):
+    bot = context.bot
     msg, img = fetch_random_news()
 
     if msg:
@@ -59,12 +74,21 @@ async def on_startup(app):
         else:
             await bot.send_message(chat_id=CHANNEL_ID, text=msg, parse_mode="Markdown")
     else:
-        await bot.send_message(chat_id=CHANNEL_ID, text="⚠️ No fresh RSS news found.")
+        await bot.send_message(chat_id=CHANNEL_ID, text="⚠️ No fresh news found in RSS feeds.")
+
+async def on_startup(app):
+    # Immediate post on start
+    context = ContextTypes.DEFAULT_TYPE()
+    await auto_post_news(context)
 
 def main():
     app = ApplicationBuilder().token(BOT_TOKEN).build()
     app.add_handler(CommandHandler("start", send_news))
-    app.post_init = on_startup
+
+    # Job queue for auto-posting every 2 minutes (testing)
+    app.job_queue.run_repeating(auto_post_news, interval=120, first=5)
+
+    print("✅ News bot started.")
     app.run_polling()
 
 if __name__ == "__main__":
