@@ -6,7 +6,7 @@ from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 CHANNEL_ID = os.getenv("CHANNEL_ID")
-NEWS_API_KEY = os.getenv("NEWS_API_KEY")
+NEWS_API_KEY = os.getenv("db677b89fa1843a5bf39d6681bed1405")
 
 def fetch_news():
     try:
