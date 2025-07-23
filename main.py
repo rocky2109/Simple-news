@@ -86,7 +86,7 @@ def main():
     app.add_handler(CommandHandler("start", send_news))
 
     # Job queue for auto-posting every 2 minutes (testing)
-    app.job_queue.run_repeating(auto_post_news, interval=120, first=5)
+    
 
     print("✅ News bot started.")
     app.run_polling()
