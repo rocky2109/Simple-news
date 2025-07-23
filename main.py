@@ -59,7 +59,7 @@ async def on_startup(app):
     bot = Bot(BOT_TOKEN)
 
     # ✅ Send startup message
-    await bot.send_message(chat_id=CHANNEL_ID, text="✅ Bot started or restarted.")
+    await bot.send_message(chat_id=CHANNEL_ID, text="✅ Bot started.")
 
     # 📰 Send one news item on startup
     msg, img = fetch_random_news()
@@ -72,14 +72,9 @@ async def on_startup(app):
 # 🚦 Main entry
 def main():
     app = ApplicationBuilder().token(BOT_TOKEN).build()
-
     app.add_handler(CommandHandler("start", send_news))
-    app.add_handler(CommandHandler("news", send_news))
-
     app.post_init = on_startup
-
-    print("✅ Bot started...")
     app.run_polling()
 
-if __name__ == "__main__":
+if name == "main":
     main()
