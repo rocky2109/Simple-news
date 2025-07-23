@@ -75,17 +75,17 @@ async def start(update, context):
 
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
 
+from telegram.ext import ApplicationBuilder, CommandHandler, JobQueue
+
 def main():
-    app = ApplicationBuilder().token(BOT_TOKEN).build()
-
+    app = ApplicationBuilder().token(BOT_TOKEN).post_init(post_init).build()
     app.add_handler(CommandHandler("start", start))
-
-    # ✅ Initialize job queue properly
-    job_queue = app.job_queue
-    job_queue.run_repeating(periodic_news, interval=120, first=5)
-
     print("✅ Bot started...")
     app.run_polling()
+
+async def post_init(app):
+    app.job_queue.run_repeating(periodic_news, interval=120, first=5)
+
 
 if __name__ == "__main__":
     main()
