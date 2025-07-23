@@ -1,94 +1,102 @@
 import os
 import random
 import feedparser
-import html
-import re
 from telegram import Bot, Update
 from telegram.ext import (
     ApplicationBuilder,
     CommandHandler,
-    ContextTypes,
-    JobQueue,
+    ContextTypes
 )
+import html
+import re
 
-BOT_TOKEN = os.getenv("BOT_TOKEN")  # Your bot token
-CHANNEL_ID = os.getenv("CHANNEL_ID")  # Your channel or user chat ID
+BOT_TOKEN = os.getenv("BOT_TOKEN")  # Bot Token from environment
+CHANNEL_ID = os.getenv("CHANNEL_ID")  # Channel ID from environment
 
-# RSS Feeds for English, Hindi, Gujarati
+# 🌐 RSS Feeds categorized by language
 RSS_FEEDS = {
     "English": "https://timesofindia.indiatimes.com/rssfeedstopstories.cms",
     "Hindi": "https://www.bhaskar.com/rss-feed/2278/",
     "Gujarati": "https://www.divyabhaskar.co.in/rss-feed/74/"
 }
 
-# Cache to avoid repeat news
-sent_links = set()
-
+# 🖼️ Extract image URL from RSS entry
 def extract_image(entry):
     match = re.search(r'<img[^>]+src="([^"]+)"', entry.get("summary", ""))
     return match.group(1) if match else None
 
-def fetch_random_news():
-    lang, feed_url = random.choice(list(RSS_FEEDS.items()))
+# 📄 Fetch random news from all or specific feed
+def fetch_news(lang_filter=None):
+    feed_list = [(lang, url) for lang, url in RSS_FEEDS.items() if not lang_filter or lang == lang_filter]
+    if not feed_list:
+        return None, None
+
+    lang, feed_url = random.choice(feed_list)
     feed = feedparser.parse(feed_url)
 
     if not feed.entries:
         return None, None
 
-    # Try up to 5 times to get a new article
-    for _ in range(5):
-        entry = random.choice(feed.entries)
-        if entry.link not in sent_links:
-            break
-    else:
-        return None, None  # All are repeated
-
+    entry = random.choice(feed.entries)
     title = html.unescape(entry.title)
-    summary = html.unescape(re.sub(r'<[^>]+>', '', entry.get("summary", "")))[:280].rstrip() + "..."
+    summary = html.unescape(re.sub(r'<[^>]+>', '', entry.get("summary", "")))[:300]
     link = entry.link
     image = extract_image(entry)
-
-    sent_links.add(link)  # Mark this news as sent
 
     message = f"🗞️ *{lang} News*\n\n*{title}*\n\n{summary}\n\n🔗 [Read more]({link})"
     return message, image
 
-async def send_news(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    msg, img = fetch_random_news()
-    if not msg:
-        await update.message.reply_text("⚠️ No fresh news found right now.")
-        return
+# 🎯 Command Handlers
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    welcome = (
+        "👋 Welcome to the Multi-Language News Bot!\n\n"
+        "You can use these commands:\n"
+        "📰 /news - Random news from any language\n"
+        "🇮🇳 /hindi - Get latest Hindi news\n"
+        "🇬🇧 /english - Get latest English news\n"
+        "🇬🇺 /gujarati - Get latest Gujarati news"
+    )
+    await update.message.reply_text(welcome)
 
+async def send_news(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    msg, img = fetch_news()
+    if not msg:
+        await update.message.reply_text("⚠️ No news found.")
+        return
     if img:
         await update.message.reply_photo(photo=img, caption=msg, parse_mode="Markdown")
     else:
         await update.message.reply_text(msg, parse_mode="Markdown")
 
-async def auto_post_news(context: ContextTypes.DEFAULT_TYPE):
-    bot = context.bot
-    msg, img = fetch_random_news()
-
-    if msg:
-        if img:
-            await bot.send_photo(chat_id=CHANNEL_ID, photo=img, caption=msg, parse_mode="Markdown")
-        else:
-            await bot.send_message(chat_id=CHANNEL_ID, text=msg, parse_mode="Markdown")
+async def send_lang_news(update: Update, context: ContextTypes.DEFAULT_TYPE, lang: str):
+    msg, img = fetch_news(lang)
+    if not msg:
+        await update.message.reply_text(f"⚠️ No {lang} news found.")
+        return
+    if img:
+        await update.message.reply_photo(photo=img, caption=msg, parse_mode="Markdown")
     else:
-        await bot.send_message(chat_id=CHANNEL_ID, text="⚠️ No fresh news found in RSS feeds.")
+        await update.message.reply_text(msg, parse_mode="Markdown")
 
-async def on_startup(app):
-    # Immediate post on start
-    context = ContextTypes.DEFAULT_TYPE()
-    await auto_post_news(context)
+# Aliased handlers for language-specific commands
+async def hindi(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await send_lang_news(update, context, "Hindi")
 
+async def english(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await send_lang_news(update, context, "English")
+
+async def gujarati(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await send_lang_news(update, context, "Gujarati")
+
+# 🚀 Start Bot
 def main():
     app = ApplicationBuilder().token(BOT_TOKEN).build()
-    app.add_handler(CommandHandler("start", send_news))
-
-    # Job queue for auto-posting every 2 minutes (testing)
-    
-
-    print("✅ News bot started.")
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("news", send_news))
+    app.add_handler(CommandHandler("hindi", hindi))
+    app.add_handler(CommandHandler("english", english))
+    app.add_handler(CommandHandler("gujarati", gujarati))
+    print("✅ Bot started...")
     app.run_polling()
 
 if __name__ == "__main__":
