@@ -1,26 +1,23 @@
 import os
 import requests
-from datetime import datetime
+from datetime import datetime, timedelta
 from telegram import Update, Bot
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
 
-BOT_TOKEN = os.getenv("BOT_TOKEN")  # Set in Koyeb Secret
-CHANNEL_ID = os.getenv("CHANNEL_ID")  # Telegram Channel ID like "@yourchannel"
-NEWS_API_KEY = os.getenv("NEWS_API_KEY")  # Your NewsAPI key
+BOT_TOKEN = os.getenv("BOT_TOKEN")  # From environment or Koyeb Secret
+CHANNEL_ID = os.getenv("CHANNEL_ID")  # Example: "@yourchannel"
+NEWS_API_KEY = os.getenv("NEWS_API_KEY")  # Your NewsAPI Key
 
-from datetime import datetime, timedelta
-
-def fetch_news():
+def fetch_weekly_news():
     try:
-        # Get date 7 days ago
         today = datetime.now()
         from_date = (today - timedelta(days=7)).strftime("%Y-%m-%d")
         to_date = today.strftime("%Y-%m-%d")
 
         url = (
             f"https://newsapi.org/v2/top-headlines?"
-            f"country=in&category=general&from={from_date}&to={to_date}&"
-            f"pageSize=3&apiKey={NEWS_API_KEY}"
+            f"country=in&category=general&pageSize=5&"
+            f"from={from_date}&to={to_date}&apiKey={NEWS_API_KEY}"
         )
 
         r = requests.get(url, timeout=10)
@@ -33,7 +30,7 @@ def fetch_news():
         return [
             {
                 "title": a["title"],
-                "summary": a.get("description") or a.get("content", ""),
+                "summary": a.get("description") or "",
                 "url": a["url"],
                 "image": a.get("urlToImage")
             }
@@ -48,36 +45,38 @@ def fetch_news():
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "👋 Welcome to *Daily India News Bot* 🇮🇳\n\n"
-        "This bot will post daily top Indian news headlines here.\n"
-        "Use /start anytime to check it's working!",
+        "This bot posts weekly top Indian news headlines here.\n"
+        "Use /start to check if it’s active.\n\n"
+        "📰 Powered by [NewsAPI](https://newsapi.org)",
         parse_mode="Markdown"
     )
 
+
 async def on_startup(app):
     bot = Bot(BOT_TOKEN)
-    await bot.send_message(chat_id=CHANNEL_ID, text="🚀 Bot started. Fetching today's top headlines...")
+    await bot.send_message(chat_id=CHANNEL_ID, text="🚀 Bot started! Fetching this week's top headlines...")
 
-    news_list = fetch_news()
+    news_list = fetch_weekly_news()
     if not news_list:
-        await bot.send_message(chat_id=CHANNEL_ID, text="⚠️ No fresh news found today.")
-        return
+        return  # Do nothing if no news
 
     for news in news_list:
         caption = f"📰 *{news['title']}*\n\n{news['summary']}\n🔗 [Read more]({news['url']})"
-        if news["image"]:
-            try:
-                await bot.send_photo(chat_id=CHANNEL_ID, photo=news["image"],
-                                     caption=caption, parse_mode="Markdown")
-            except Exception:
+        try:
+            if news["image"]:
+                await bot.send_photo(chat_id=CHANNEL_ID, photo=news["image"], caption=caption, parse_mode="Markdown")
+            else:
                 await bot.send_message(chat_id=CHANNEL_ID, text=caption, parse_mode="Markdown")
-        else:
-            await bot.send_message(chat_id=CHANNEL_ID, text=caption, parse_mode="Markdown")
+        except Exception as e:
+            print(f"Error sending message: {e}")
+
 
 def main():
     app = ApplicationBuilder().token(BOT_TOKEN).build()
     app.add_handler(CommandHandler("start", start))
     app.post_init = on_startup
     app.run_polling()
+
 
 if __name__ == "__main__":
     main()
