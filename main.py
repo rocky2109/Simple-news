@@ -1,82 +1,86 @@
 import os
-import requests
-from datetime import datetime, timedelta
-from telegram import Update, Bot
+import asyncio
+import random
+import feedparser
+from datetime import datetime
+from telegram import Bot
+from telegram.constants import ParseMode
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
-CHANNEL_ID = os.getenv("CHANNEL_ID")
-NEWS_API_KEY = os.getenv("db677b89fa1843a5bf39d6681bed1405")
+CHANNEL_ID = os.getenv("CHANNEL_ID")  # like '@your_channel_username'
 
-def fetch_news():
-    try:
-        today = datetime.now()
-        from_date = (today - timedelta(days=7)).strftime("%Y-%m-%d")
-        to_date = today.strftime("%Y-%m-%d")
+# RSS Feeds (Gujarati, Hindi, English)
+RSS_FEEDS = [
+    "https://gujaratsamachar.com/rss/gujarat",            # Gujarati
+    "https://www.bhaskar.com/rss-national/",              # Hindi
+    "https://timesofindia.indiatimes.com/rssfeeds/-2128936835.cms",  # English
+    "https://www.thehindu.com/news/national/feeder/default.rss",     # English
+]
 
-        url = (
-            f"https://newsapi.org/v2/top-headlines?"
-            f"country=in&pageSize=5&apiKey={NEWS_API_KEY}"
-        )
+def fetch_random_rss_article():
+    all_articles = []
+    for url in RSS_FEEDS:
+        try:
+            feed = feedparser.parse(url)
+            for entry in feed.entries:
+                all_articles.append({
+                    "title": entry.get("title", ""),
+                    "summary": entry.get("summary", "")[:500],
+                    "link": entry.get("link", ""),
+                    "image": extract_image(entry)
+                })
+        except Exception as e:
+            print(f"Error parsing feed {url}: {e}")
 
-        response = requests.get(url, timeout=10)
-        data = response.json()
-
-        if data.get("status") != "ok":
-            print(f"⚠️ NewsAPI error: {data.get('message')}")
-            return None
-
-        articles = data.get("articles", [])
-        if not articles:
-            print("⚠️ No articles returned from API.")
-            return None
-
-        return [
-            {
-                "title": a["title"],
-                "summary": a.get("description") or a.get("content", "No summary provided."),
-                "url": a["url"],
-                "image": a.get("urlToImage")
-            }
-            for a in articles[:3]
-        ]
-
-    except Exception as e:
-        print(f"[Error] fetch_news: {e}")
+    if not all_articles:
         return None
 
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text(
-        "👋 Welcome to *Daily India News Bot* 🇮🇳\n\n"
-        "This bot posts the top Indian news headlines.\nUse /start to confirm it's working!",
-        parse_mode="Markdown"
-    )
+    return random.choice(all_articles)
 
-async def on_startup(app):
-    bot = Bot(BOT_TOKEN)
-    await bot.send_message(chat_id=CHANNEL_ID, text="🚀 Bot started. Fetching today’s top headlines...")
+def extract_image(entry):
+    # Common RSS image fields
+    media_content = entry.get("media_content", [])
+    if media_content:
+        return media_content[0].get("url")
+    # Some RSS feed may embed image in summary
+    if "img" in entry.get("summary", ""):
+        import re
+        match = re.search(r'<img[^>]+src="([^">]+)"', entry["summary"])
+        if match:
+            return match.group(1)
+    return None
 
-    news_list = fetch_news()
-    if not news_list:
-        await bot.send_message(chat_id=CHANNEL_ID, text="⚠️ No fresh news found today.")
+async def post_news(bot: Bot):
+    article = fetch_random_rss_article()
+    if not article:
+        await bot.send_message(chat_id=CHANNEL_ID, text="⚠️ No news found.")
         return
 
-    for news in news_list:
-        caption = f"📰 *{news['title']}*\n\n{news['summary']}\n🔗 [Read more]({news['url']})"
-        if news["image"]:
-            try:
-                await bot.send_photo(chat_id=CHANNEL_ID, photo=news["image"],
-                                     caption=caption, parse_mode="Markdown")
-            except Exception as e:
-                print(f"⚠️ Failed to send image: {e}")
-                await bot.send_message(chat_id=CHANNEL_ID, text=caption, parse_mode="Markdown")
+    caption = f"🗞 *{article['title']}*\n\n{article['summary']}\n\n🔗 [Read more]({article['link']})"
+
+    try:
+        if article["image"]:
+            await bot.send_photo(chat_id=CHANNEL_ID, photo=article["image"], caption=caption, parse_mode=ParseMode.MARKDOWN)
         else:
-            await bot.send_message(chat_id=CHANNEL_ID, text=caption, parse_mode="Markdown")
+            await bot.send_message(chat_id=CHANNEL_ID, text=caption, parse_mode=ParseMode.MARKDOWN)
+    except Exception as e:
+        print(f"Error sending message: {e}")
+
+async def periodic_news(context: ContextTypes.DEFAULT_TYPE):
+    await post_news(context.bot)
+
+async def start(update, context):
+    await update.message.reply_text("👋 Welcome! You’ll get auto-updated multilingual news every 2 minutes for testing.")
 
 def main():
     app = ApplicationBuilder().token(BOT_TOKEN).build()
     app.add_handler(CommandHandler("start", start))
-    app.post_init = on_startup
+
+    # Auto update every 2 minutes for testing
+    app.job_queue.run_repeating(periodic_news, interval=120, first=5)
+
+    print("✅ Bot started...")
     app.run_polling()
 
 if __name__ == "__main__":
