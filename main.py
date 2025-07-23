@@ -73,12 +73,16 @@ async def periodic_news(context: ContextTypes.DEFAULT_TYPE):
 async def start(update, context):
     await update.message.reply_text("👋 Welcome! You’ll get auto-updated multilingual news every 2 minutes for testing.")
 
+from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
+
 def main():
     app = ApplicationBuilder().token(BOT_TOKEN).build()
+
     app.add_handler(CommandHandler("start", start))
 
-    # Auto update every 2 minutes for testing
-    app.job_queue.run_repeating(periodic_news, interval=120, first=5)
+    # ✅ Initialize job queue properly
+    job_queue = app.job_queue
+    job_queue.run_repeating(periodic_news, interval=120, first=5)
 
     print("✅ Bot started...")
     app.run_polling()
