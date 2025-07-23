@@ -67,5 +67,4 @@ def main():
     app.post_init = on_startup
     app.run_polling()
 
-if name == "main":
-    main()
+Bot().run()
