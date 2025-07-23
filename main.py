@@ -12,9 +12,9 @@ CHANNEL_ID = os.getenv("CHANNEL_ID")
 
 # Original RSS feeds (same as before)
 RSS_FEEDS = {
-    "English": "https://timesofindia.indiatimes.com/rssfeedstopstories.cms",
+    "Gujarati": "https://www.sandesh.com/rss/gujarat",
     "Hindi": "https://www.bhaskar.com/rss-feed/2278/",
-    "Gujarati": "https://www.divyabhaskar.co.in/rss-feed/74/"
+    "English": "https://timesofindia.indiatimes.com/rssfeedstopstories.cms"
 }
 
 # Keywords to identify educational content
@@ -70,7 +70,7 @@ def fetch_educational_news(max_attempts: int = 3) -> tuple[str | None, str | Non
             image = extract_image(entry)
 
             message = (
-                f"📚 *Educational News ({lang})*\n\n"
+                f"📚 *Latest News ({lang})*\n\n"
                 f"*{title}*\n\n"
                 f"{summary}\n\n"
                 f"🔗 [Read more]({link})"
@@ -101,7 +101,7 @@ async def send_news(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         await update.message.reply_text(
             msg, 
             parse_mode="Markdown",
-            disable_web_page_preview=True
+            
         )
 
 async def on_startup(app) -> None:
